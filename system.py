@@ -4,6 +4,8 @@ import tkinter.ttk
 import customtkinter
 import sqlite3
 
+# FAZENDO A ATIVIDADE DO PROFESSOR AVALIATIVA, EDUARDO ESTUDE ISSO AQUI AI UH OHHH
+
 items = ["Opcão1", "Opção2", "Opção3", "Opcão4", "Opção5", "Opção6"]
 items1 = ["1", "2", "3", "4", "5", "6"]
 items2 = ["1", "2", "3", "4", "5", "6"]
