@@ -138,8 +138,6 @@ def editar_dados(nome_produto,preco_produto,descricao_produto):
     Editar_descricao.delete(0.0, "end")
     atualizar_scrollframe(Produto_T)
 
-
-
 def obter_nomes_produto_saida():
     conexao_cadastro = sqlite3.connect("Banco estoque.db")
     terminal_cadastro_sql = conexao_cadastro.cursor()
@@ -147,8 +145,6 @@ def obter_nomes_produto_saida():
     nomes = terminal_cadastro_sql.fetchall()
     conexao_cadastro.close()
     return [nome[0] for nome in nomes]
-
-
 
 def atualizar_scrollframe_saida(frame):
 
@@ -229,7 +225,8 @@ def inserir_dados_entrada(nome_produto, frame):
         Nome_quantidadeE.insert(0, dados_produto[0][0])
         Quantidade_E.insert(0, str(dados_produto[0][1]))
 
-
+def cancelar_edicao():
+    limpar_campo_edicao()
 def Tela_Cadastrar():
     Frame_Editar.grid_forget()
     Frame_Saida.grid_forget()
@@ -252,7 +249,6 @@ def Tela_Editar():
     Frame_Editar.grid_propagate(False)
     Frame_Editar.grid(row=0, column=1, padx=5, pady=5)
     atualizar_scrollframe(Produto_T)
-
 
 def Tela_Saída():
     Frame_Cadastro.grid_forget()
@@ -487,7 +483,7 @@ Produto_T.grid(pady=0, padx=20, row=2, column=0, rowspan=4)
 Excluir = customtkinter.CTkButton(Frame_Editar, text="Excluir", width=80, fg_color="Red", hover_color="Blue",command = lambda : deletar_produtos(Editar_dados.get()))
 Excluir.grid(padx=5, pady=5, stick="w", row=5, column=1)
 
-Cancelar = customtkinter.CTkButton(Frame_Editar, text="Cancelar", width=80, fg_color="Purple", hover_color="Blue")
+Cancelar = customtkinter.CTkButton(Frame_Editar, text="Cancelar", width=80, fg_color="Purple", hover_color="Blue", command=cancelar_edicao)
 Cancelar.grid(padx=0, pady=5, row=5, column=2)
 
 Salvar = customtkinter.CTkButton(Frame_Editar, text="Salvar", width=80, fg_color="Purple", hover_color="Blue", command = lambda : editar_dados(Editar_dados.get(), Editar_preco.get(), Editar_descricao.get(1.0, "end")))

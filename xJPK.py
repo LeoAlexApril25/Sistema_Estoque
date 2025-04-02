@@ -4,7 +4,11 @@ import tkinter.ttk
 import customtkinter
 import sqlite3
 
-items = ["Opcão1", "Opção2", "Opção3", "Opcão4", "Opção5", "Opção6"]
+produto_selecionado_entrada = None
+produto_selecionado_saida = None
+
+
+'''items = ["Opcão1", "Opção2", "Opção3", "Opcão4", "Opção5", "Opção6"]'''
 items1 = ["1", "2", "3", "4", "5", "6"]
 items2 = ["1", "2", "3", "4", "5", "6"]
 coluna = ["NOME","QUANTIDADE","PREÇO","DESCRIÇÃO"]
@@ -13,6 +17,7 @@ coluna_entrada = ["Nome", "Quantidade", "Data/hora"]
 
 customtkinter.set_appearance_mode("Dark")
 customtkinter.set_default_color_theme("blue")
+
 def criar_cadastro():
     conexao_cadastro = sqlite3.connect("Banco estoque.db")
     terminal_cadastro_sql = conexao_cadastro.cursor()
@@ -87,29 +92,64 @@ def atualizar_scrollframe(frame):
         )
         box.grid(pady=5, sticky="w")
 
+def limpar_campo_edicao():
+    Editar_dados.delete(0,tk.END)
+    Editar_preco.delete(0,tk.END)
+    Editar_descricao.delete('1.0',tk.END)
+
+global  Editar_dados, Editar_preco, Editar_descricao
+
+def seleciona_item(arg_item,arg_list):
+    global valor_checkbox
+    valor_checkbox = arg_item.get().strip("(),'\"")
+    conexao_cadastro = sqlite3.connect("Banco estoque.db")
+    terminal_sql_cadastro = conexao_cadastro.cursor()
+    terminal_sql_cadastro.execute(f"SELECT*FROM produto WHERE nome ='{valor_checkbox}")
+    receber_dados_produto = terminal_sql_cadastro.fetchall()
+    inserir_dados(receber_dados_produto, arg_list)
 
 def insere_dados(nome_produto, frame):
+    global nome_original
     conexao_cadastro = sqlite3.connect("Banco estoque.db")
     terminal_cadastro_sql = conexao_cadastro.cursor()
     terminal_cadastro_sql.execute(f"SELECT * FROM cadastro WHERE nome = '{nome_produto}'")
     dados_produto = terminal_cadastro_sql.fetchall()
     print(frame)
     if frame == Produto_T:
-
+        nome_original = dados_produto[0][0]
         Editar_dados.insert(0, dados_produto[0][0])
         Editar_preco.insert(0, dados_produto[0][2])
         Editar_descricao.insert(0.0, dados_produto[0][3])
 
+def deletar_produtos(nome_produto):
+    conexao_cadastro = sqlite3.connect("Banco estoque.db")
+    terminal_cadastro_sql = conexao_cadastro.cursor()
+    terminal_cadastro_sql.execute(f"DELETE FROM cadastro WHERE nome ='{nome_produto}'")
+    conexao_cadastro.commit()
+    conexao_cadastro.close()
+    Editar_dados.delete(0, "end")
+    Editar_preco.delete(0, "end")
+    Editar_descricao.delete(0.0, "end")
+    atualizar_scrollframe(Produto_T)
+
+def editar_dados(nome_produto,preco_produto,descricao_produto):
+    conexao_cadastro = sqlite3.connect("Banco estoque.db")
+    terminal_sql_cadastro = conexao_cadastro.cursor()
+    terminal_sql_cadastro.execute(f"UPDATE cadastro SET nome = '{nome_produto}',preco = '{preco_produto}', descricao = '{descricao_produto}' WHERE nome ='{nome_original}'")
+    conexao_cadastro.commit()
+    conexao_cadastro.close()
+    Editar_dados.delete(0, "end")
+    Editar_preco.delete(0, "end")
+    Editar_descricao.delete(0.0, "end")
+    atualizar_scrollframe(Produto_T)
 
 def obter_nomes_produto_saida():
     conexao_cadastro = sqlite3.connect("Banco estoque.db")
     terminal_cadastro_sql = conexao_cadastro.cursor()
-    terminal_cadastro_sql.execute("SELECT nome FROM cadastro")
-    nomes_saida = terminal_cadastro_sql.fetchall()
+    terminal_cadastro_sql.execute("SELECT nome, quantidade FROM cadastro")
+    nomes = terminal_cadastro_sql.fetchall()
     conexao_cadastro.close()
-    return [nome[0] for nome in nomes_saida]
-
-
+    return [nome[0] for nome in nomes]
 
 def atualizar_scrollframe_saida(frame):
 
@@ -117,8 +157,7 @@ def atualizar_scrollframe_saida(frame):
     for widget in frame.winfo_children():
         widget.destroy()
 
-
-    produtos = obter_nomes_produtos()
+    produtos = obter_nomes_produto_saida()
 
 
     for produto in produtos:
@@ -134,37 +173,61 @@ def atualizar_scrollframe_saida(frame):
         )
         box1.grid(pady=5, sticky="w")
 
-def inserir_dados(nome_produto,frame):
+def inserir_dados(nome_produto, frame):
+    global produto_selecionado_saida
     conexao_cadastro = sqlite3.connect("Banco estoque.db")
     terminal_cadastro_sql = conexao_cadastro.cursor()
     terminal_cadastro_sql.execute(f"SELECT * FROM cadastro WHERE nome = '{nome_produto}'")
     dados_produto = terminal_cadastro_sql.fetchall()
     print(frame)
+
     if frame == Produto_S:
-        Nome_quantidade.insert(0, dados_produto[0], [0])
-        Quantidade_R.insert(0,str( dados_produto[0], [1]))
+        produto_selecionado_saida = dados_produto[0]
+        Nome_quantidade.delete(0,tk.END)
+        Nome_quantidade.insert(0, dados_produto[0][0])
+        Quantidade_R.delete(0, tk.END)
+        Quantidade_R.insert(0, dados_produto[0][1])
 
 
+def adicionar_item_saida():
+    global produto_selecionado_saida
+
+    if produto_selecionado_saida is None:
+        print("❌ Nenhum produto selecionado!")
+        return
+
+    quantidade_retirada = Quantidade_R.get().strip()
+
+    if not quantidade_retirada.isdigit():
+        print("❌ Quantidade inválida! Digite um número.")
+        return
+
+    quantidade_recebida = int(quantidade_retirada)
+
+    texto_item = f"{produto_selecionado_saida[0]} | Qtd: {quantidade_retirada}"
+
+    create_line(Entrada_frame, texto_item, len(Entrada_frame.winfo_children()) // 2 + 1)
+
+    Quantidade_R.delete(0, tk.END)
+    produto_selecionado_saida = None
+    Nome_quantidade.delete(0, tk.END)
 
 
 def obter_nomes_produto_entrada():
     conexao_cadastro = sqlite3.connect("Banco estoque.db")
     terminal_cadastro_sql = conexao_cadastro.cursor()
-    terminal_cadastro_sql.execute("SELECT nome FROM cadastro")
-    nomes_saida = terminal_cadastro_sql.fetchall()
+    terminal_cadastro_sql.execute("SELECT nome, quantidade FROM cadastro")
+    nomes = terminal_cadastro_sql.fetchall()
     conexao_cadastro.close()
-    return [nome[0] for nome in nomes_saida]
+    return [nome[0] for nome in nomes]
 
-
-
-def atualizar_scrollframe_saida(frame):
+def atualizar_scrollframe_entrada(frame):
 
 
     for widget in frame.winfo_children():
         widget.destroy()
 
-
-    produtos = obter_nomes_produtos()
+    produtos = obter_nomes_produto_entrada()
 
 
     for produto in produtos:
@@ -176,9 +239,58 @@ def atualizar_scrollframe_saida(frame):
             frame,
             text=produto,
             variable=var,
-            command=lambda p=produto, v=var: print(f"Produto: {p}") if v.get() == 1 else None
+            command=lambda p=produto, v=var: inserir_dados_entrada(p, frame) if v.get() == 1 else None
         )
         box2.grid(pady=5, sticky="w")
+
+
+def inserir_dados_entrada(nome_produto, frame):
+    global produto_selecionado_entrada
+
+    conexao_cadastro = sqlite3.connect("Banco estoque.db")
+    terminal_cadastro_sql = conexao_cadastro.cursor()
+    terminal_cadastro_sql.execute(f"SELECT * FROM cadastro WHERE nome = '{nome_produto}'")
+    dados_produto = terminal_cadastro_sql.fetchall()
+    conexao_cadastro.close()
+
+    if frame == Produto_E:
+        produto_selecionado_entrada = dados_produto[0]  # Armazena o produto
+        Nome_quantidadeE.delete(0, tk.END)
+        Nome_quantidadeE.insert(0, dados_produto[0][0])
+        Quantidade_E.delete(0, tk.END)
+        Quantidade_E.insert(0, str(dados_produto[0][1]))
+
+
+def adicionar_item_entrada():
+    global produto_selecionado_entrada
+
+    if produto_selecionado_entrada is None:
+        print("❌ Nenhum produto selecionado!")
+        return
+
+    quantidade_recebida = Quantidade_E.get().strip()
+
+    if not quantidade_recebida.isdigit():
+        print("❌ Quantidade inválida! Digite um número.")
+        return
+
+    quantidade_recebida = int(quantidade_recebida)
+
+
+    texto_item = f"{produto_selecionado_entrada[0]} | Qtd: {quantidade_recebida}"
+
+
+    create_line(Entrada_frame, texto_item, len(Entrada_frame.winfo_children()) // 2 + 1)
+
+
+    Quantidade_E.delete(0, tk.END)
+    produto_selecionado_entrada = None
+    Nome_quantidadeE.delete(0, tk.END)
+
+def cancelar_edicao():
+    limpar_campo_edicao()
+
+
 def Tela_Cadastrar():
     Frame_Editar.grid_forget()
     Frame_Saida.grid_forget()
@@ -190,6 +302,7 @@ def Tela_Cadastrar():
     Frame_Cadastro.grid(row=0, column=1, padx=5, pady=5)
     if hasattr(Frame_Cadastro, 'produtos_frame'):
         atualizar_scrollframe(Frame_Cadastro.produtos_frame)
+
 
 def Tela_Editar():
     Frame_Cadastro.grid_forget()
@@ -211,7 +324,9 @@ def Tela_Saída():
     Frame_B_Relatorio_Entrada.grid_forget()
     Frame_Saida.grid_propagate(False)
     Frame_Saida.grid(row=0, column=1, padx=5, pady=5)
-    atualizar_scrollframe(Produto_S)
+    #atualizar_scrollframe(Produto_S)
+    atualizar_scrollframe_saida(Produto_S)
+
 def Tela_Entrada():
     Frame_Cadastro.grid_forget()
     Frame_Editar.grid_forget()
@@ -221,7 +336,8 @@ def Tela_Entrada():
     Frame_B_Relatorio_Entrada.grid_forget()
     Frame_Entrada.grid_propagate(False)
     Frame_Entrada.grid(row=0, column=1, padx=5, pady=5)
-    atualizar_scrollframe(Produto_E)
+    #atualizar_scrollframe(Produto_E)
+    atualizar_scrollframe_entrada(Produto_E)
 
 def Tela_Relatorio():
     Frame_Cadastro.grid_forget()
@@ -237,14 +353,23 @@ def Tela_Relatorio():
 def on_trash_icon_click(item_num):
     print(f"Ícone de lixeira da linha {item_num} clicado!")
 
-def create_line(Frame_04, text, item_num):
-    label = customtkinter.CTkLabel(line_frame, text=text, anchor="w")
-    label.grid(row=item_num, column=0, padx=5, pady=0, stick="ew")
-    #label.pack(side="left", fill="x")
 
-    trash_icon = customtkinter.CTkButton(line_frame, text="🗑️", command=lambda: on_trash_icon_click(item_num), width=40, height=20)
-    trash_icon.grid(row=item_num, column=1, padx=5, pady=0, stick="e")
-    #trash_icon.pack(side="right", fill="x")
+def create_line(frame, text, item_num):
+    linha_frame = customtkinter.CTkFrame(frame)
+    linha_frame.grid(row=item_num, column=0, columnspan=2, sticky="ew", pady=2)
+
+    # Label com o texto do item
+    label = customtkinter.CTkLabel(linha_frame, text=text, anchor="w")
+    label.pack(side="left", padx=5, fill="x", expand=True)
+
+    # Botão de lixeira para remover
+    trash_icon = customtkinter.CTkButton(
+        linha_frame,
+        text="🗑️",
+        width=40, height=20,
+        command=lambda: linha_frame.destroy()  # Remove a linha
+    )
+    trash_icon.pack(side="right", padx=5)
 
     line_frame.grid_columnconfigure(0, weight=1)
     line_frame.grid_columnconfigure(1, weight=1)
@@ -252,17 +377,25 @@ def create_line(Frame_04, text, item_num):
 def on_trash_icon_click2(item1_num):
     print(f"Ícone de lixeira da linha {item1_num} clicado!")
 
-def create_line2(Frame_05, text, item1_num):
-    label1 = customtkinter.CTkLabel(Entrada_frame, text=text, anchor="w")
-    label1.grid(row=item1_num, column=0, padx=5, pady=0, stick="ew")
-    # label.pack(side="left", fill="x")
+def create_line_entrada(frame, text, item_num):
+    linha_frame_saida = customtkinter.CTkFrame(frame)
+    linha_frame_saida.grid(row=item_num, column=0, columnspan=2, sticky="ew", pady=2)
+
+    # Label com o texto do item
+    label = customtkinter.CTkLabel(Entrada_frame, text=text, anchor="w")
+    label.pack(side="left", padx=5, fill="x", expand=True)
+
+    # Botão de lixeira para remover
+    trash_icon = customtkinter.CTkButton(
+        Entrada_frame,
+        text="🗑️",
+        width=40, height=20,
+        command=lambda: Entrada_frame.destroy()  # Remove a linha
+    )
+    trash_icon.pack(side="right", padx=5)
 
     Entrada_frame.grid_columnconfigure(0, weight=1)
     Entrada_frame.grid_columnconfigure(1, weight=1)
-
-    trash_icon1 = customtkinter.CTkButton(Entrada_frame, text="🗑️", command=lambda: on_trash_icon_click2(item1_num), width=40, height=20)
-    trash_icon1.grid(row=item1_num, column=1, padx=5, pady=0, stick="e")
-    # trash_icon.pack(side="right", fill="x")
 
 def Tela_B_estoque():
     Frame_B_Relatorio_Saida.grid_forget()
@@ -291,7 +424,7 @@ def abrir_janela2():
         janela2.geometry("590x380")
         janela2.title("Projeto")
 
-        label_relatorio = customtkinter.CTkLabel(janela2,text="Escolher relatório(s):",text_color="#A8B30F")
+        label_relatorio = customtkinter.CTkLabel(janela2, text="Escolher relatório(s):",text_color="#A8B30F")
         label_relatorio.grid(row=1, column=0, pady=20, padx=20, sticky="w")
 
         exportar_estoque = customtkinter.CTkCheckBox(janela2, text="Exportar Estoque")
@@ -305,7 +438,7 @@ def abrir_janela2():
 
         #titulo escolher extenção
 
-        label_extencao = customtkinter.CTkLabel(janela2,text="Escolher extensão:",text_color="#A8B30F")
+        label_extencao = customtkinter.CTkLabel(janela2,text="Escolher extensão:", text_color="#A8B30F")
         label_extencao.grid(row=1, column=2, pady=20, padx=100, sticky="w")
 
         # Caixas para formatos de arquivo
@@ -429,13 +562,13 @@ Editar_descricao.grid(padx=5, pady=0, row=3, column=1, stick="w", columnspan=3)
 Produto_T = customtkinter.CTkScrollableFrame(Frame_Editar)
 Produto_T.grid(pady=0, padx=20, row=2, column=0, rowspan=4)
 
-Excluir = customtkinter.CTkButton(Frame_Editar, text="Excluir", width=80, fg_color="Red", hover_color="Blue")
+Excluir = customtkinter.CTkButton(Frame_Editar, text="Excluir", width=80, fg_color="Red", hover_color="Blue",command = lambda : deletar_produtos(Editar_dados.get()))
 Excluir.grid(padx=5, pady=5, stick="w", row=5, column=1)
 
-Cancelar = customtkinter.CTkButton(Frame_Editar, text="Cancelar", width=80, fg_color="Purple", hover_color="Blue")
+Cancelar = customtkinter.CTkButton(Frame_Editar, text="Cancelar", width=80, fg_color="Purple", hover_color="Blue", command=cancelar_edicao)
 Cancelar.grid(padx=0, pady=5, row=5, column=2)
 
-Salvar = customtkinter.CTkButton(Frame_Editar, text="Salvar", width=80, fg_color="Purple", hover_color="Blue")
+Salvar = customtkinter.CTkButton(Frame_Editar, text="Salvar", width=80, fg_color="Purple", hover_color="Blue", command = lambda : editar_dados(Editar_dados.get(), Editar_preco.get(), Editar_descricao.get(1.0, "end")))
 Salvar.grid(padx=5, pady=5, stick="e", row=5, column=3)
 
 #Frame04
@@ -458,7 +591,7 @@ Produto_S.grid(pady=0, padx=20, row=2, column=0, rowspan=3)
 Quantidade_R = customtkinter.CTkEntry(Frame_Saida, placeholder_text="Quatidade retirada", width=90)
 Quantidade_R.grid(padx=5, pady=0, row=2, column=1, stick="w")
 
-item_B = customtkinter.CTkButton(Frame_Saida, text="Adic item", fg_color="Blue", font=("Couvier", 16), width=130)
+item_B = customtkinter.CTkButton(Frame_Saida, text="Adic item", fg_color="Blue", font=("Couvier", 16), width=130, command=adicionar_item_saida)
 item_B.grid(padx=5, pady=5, row=2, column=2, stick="e")
 
 line_frame = customtkinter.CTkFrame(Frame_Saida, width=230)
@@ -489,7 +622,7 @@ Produto_E.grid(pady=0, padx=20, row=2, column=0, rowspan=3)
 Quantidade_E = customtkinter.CTkEntry(Frame_Entrada, placeholder_text="Quatidade recebida", width=90)
 Quantidade_E.grid(padx=5, pady=0, row=2, column=1, stick="w")
 
-item_Adic = customtkinter.CTkButton(Frame_Entrada, text="Adic item", fg_color="Blue", font=("Couvier", 16), width=130)
+item_Adic = customtkinter.CTkButton(Frame_Entrada, text="Adic item", fg_color="Blue", font=("Couvier", 16), width=130, command=adicionar_item_entrada)
 item_Adic.grid(padx=5, pady=5, row=2, column=2, stick="e")
 
 Entrada_frame = customtkinter.CTkFrame(Frame_Entrada, width=230)
@@ -547,13 +680,13 @@ Frame_Relatorio.grid_rowconfigure(2, weight=1)  # Linha com a Textbox vai se exp
 Frame_Relatorio.grid_rowconfigure(3, weight=0)  # Linha dos botões não vai se expandir
 
 
-B_Estoque = customtkinter.CTkButton(Frame_Relatorio, text="Estoque", fg_color="Red", font=("Couvier", 16), width=80, command=Tela_B_estoque)
+B_Estoque = customtkinter.CTkButton(Frame_Relatorio, text="Estoque", fg_color="Red", font=("Couvier", 16), width=80, command =Tela_B_estoque)
 B_Estoque.grid(padx=5, pady=0,  row=3, column=1)
 
-B_Saida = customtkinter.CTkButton(Frame_Relatorio, text="Saida", fg_color="Red", font=("Couvier", 16), width=80, command=Tela_B_saida)
+B_Saida = customtkinter.CTkButton(Frame_Relatorio, text="Saida", fg_color="Red", font=("Couvier", 16), width=80, command = Tela_B_saida)
 B_Saida.grid(padx=5, pady=0, row=3, column=2)
 
-B_Entrada = customtkinter.CTkButton(Frame_Relatorio, text="Entrada", fg_color="Red", font=("Couvier", 16), width=80, command=Tela_B_entrada)
+B_Entrada = customtkinter.CTkButton(Frame_Relatorio, text="Entrada", fg_color="Red", font=("Couvier", 16), width=80, command =Tela_B_entrada)
 B_Entrada.grid(padx=5, pady=0, row=3, column=3)
 
 # Aqui é o botão de saída do frame do relatorio
@@ -682,13 +815,13 @@ B_Entrada_Relatorio_E.grid(padx=5, pady=0, row=3, column=3)
 # Usando no frame da Saída
 item = [f"Item {i + 1}" for i in range(3)]
 
-for i, item in enumerate(items):
-    create_line(Frame_Saida, item, i + 1)
+'''for i, item in enumerate(items):
+    create_line(Frame_Saida, item, i + 1)'''
 
 # Usando no Frame entrada
-item2 = [f"Item {i + 1}" for i in range(3)]
+'''item2 = [f"Item {i + 1}" for i in range(3)]
 for i, item2 in enumerate(items2):
-    create_line2(Frame_Entrada, item2, i + 1)
+    create_line2(Frame_Entrada, item2, i + 1)'''
 
 # Usando no Frame editar
 '''for item in items:
