@@ -28,25 +28,31 @@ def criar_cadastro():
 
 
 def criar_tabelas_historico():
-    conn = sqlite3.connect("Banco estoque.db")
-    cursor = conn.cursor()
+    conexao = sqlite3.connect("Banco estoque.db")
+    cursor = conexao.cursor()
 
+    # Corrigindo a sintaxe SQL e usando o mesmo cursor
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS historico_saida (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
         quantidade INTEGER,
-        data TEXT DEFAULT (datetime('now'))
-    )""")
+        data TEXT
+    )
+    """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS historico_entrada (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
         quantidade INTEGER,
-        data TEXT DEFAULT (datetime('now'))
-    )""")
+        data TEXT
+    )
+    """)
 
-    conn.commit()
-    conn.close()
+    conexao.commit()
+    conexao.close()
+
 
 
 def limpar_campos_cadastro():
@@ -83,6 +89,72 @@ def ler_cadastro():
         conexao_cadastro.close()
 
 criar_cadastro()
+
+
+global Quantidade_E, Nome_quantidadeE, Quantidade_R, Nome_quantidade
+
+
+def verificar_banco():
+    try:
+        conn = sqlite3.connect("Banco estoque.db")
+        cursor = conn.cursor()
+
+        # Verifica tabela de entrada
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='historico_entrada'")
+        if not cursor.fetchone():
+            criar_tabelas_historico()
+
+        # Verifica tabela de saída
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='historico_saida'")
+        if not cursor.fetchone():
+            criar_tabelas_historico()
+
+    except Exception as e:
+        print(f"Erro ao verificar banco: {e}")
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+
+# Chame esta função no início do seu programa
+verificar_banco()
+
+def ler_historico_saida():
+    conexao = sqlite3.connect("Banco estoque.db")
+    cursor = conexao.cursor()
+    cursor.execute("SELECT nome, quantidade, data FROM historico_saida ORDER BY data DESC")
+    historico = cursor.fetchall()
+    conexao.close()
+
+    for row in tabela_Saida.get_children():
+        tabela_Saida.delete(row)
+
+    for item in historico:
+        tabela_Saida.insert("", tk.END, values=item)
+
+
+def ler_historico_entrada():
+    try:
+        conn = sqlite3.connect("Banco estoque.db")
+        cursor = conn.cursor()
+
+        # Limpa a tabela
+        for item in tabela_Entrada.get_children():
+            tabela_Entrada.delete(item)
+
+        # Busca novos dados
+        cursor.execute("SELECT nome, quantidade, data FROM historico_entrada ORDER BY data DESC")
+        dados = cursor.fetchall()
+
+        # Insere na tabela
+        for linha in dados:
+            tabela_Entrada.insert("", tk.END, values=linha)
+
+    except Exception as e:
+        print(f"Erro ao ler histórico de entrada: {e}")
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
 def obter_nomes_produtos():
     conexao_cadastro = sqlite3.connect("Banco estoque.db")
@@ -197,20 +269,78 @@ def atualizar_scrollframe_saida(frame):
 
 def inserir_dados_saida(nome_produto, frame):
     global produto_selecionado_saida
-    conexao_cadastro = sqlite3.connect("Banco estoque.db")
-    terminal_cadastro_sql = conexao_cadastro.cursor()
-    terminal_cadastro_sql.execute(f"SELECT * FROM cadastro WHERE nome = '{nome_produto}'")
-    dados_produto = terminal_cadastro_sql.fetchall()
-    conexao_cadastro.close()
+    try:
+        conexao_cadastro = sqlite3.connect("Banco estoque.db")
+        terminal_cadastro_sql = conexao_cadastro.cursor()
+        terminal_cadastro_sql.execute(f"SELECT * FROM cadastro WHERE nome = '{nome_produto}'")
+        dados_produto = terminal_cadastro_sql.fetchall()
 
-    if frame == Produto_S:
-        produto_selecionado_saida = dados_produto[0]
+        if dados_produto:  # Verifica se encontrou o produto
+            produto_selecionado_saida = dados_produto[0]
+            Nome_quantidade.delete(0, tk.END)
+            Nome_quantidade.insert(0, dados_produto[0][0])
+            Quantidade_R.delete(0, tk.END)
+            Quantidade_R.insert(0, str(dados_produto[0][1]))
+        else:
+            print("Produto não encontrado no banco de dados")
+    except Exception as e:
+        print(f"Erro ao buscar produto: {e}")
+    finally:
+        if 'conexao_cadastro' in locals():
+            conexao_cadastro.close()
+
+
+def salvar_saida():
+    global produto_selecionado_saida
+
+    if not produto_selecionado_saida:
+        print("❌ Nenhum produto selecionado!")
+        return
+
+    quantidade = Quantidade_R.get()
+    if not quantidade.isdigit():
+        print("❌ Quantidade inválida!")
+        return
+
+    quantidade = int(quantidade)
+    nome_produto = produto_selecionado_saida[0]
+    estoque_atual = produto_selecionado_saida[1]
+
+    if quantidade > estoque_atual:
+        print("❌ Quantidade maior que estoque!")
+        return
+
+    try:
+        conn = sqlite3.connect("Banco estoque.db")
+        cursor = conn.cursor()
+
+        # Atualiza estoque
+        cursor.execute("UPDATE cadastro SET quantidade = quantidade - ? WHERE nome = ?",
+                       (quantidade, nome_produto))
+
+        # Registra histórico
+        cursor.execute("INSERT INTO historico_saida (nome, quantidade, data) VALUES (?, ?, datetime('now'))",
+                       (nome_produto, quantidade))
+
+        conn.commit()
+        print("✅ Saída registrada com sucesso!")
+
+        # Atualiza visualizações
+        ler_cadastro()
+        ler_historico_saida()
+        Tela_B_saida()  # Força a atualização do relatório
+
+    except Exception as e:
+        print(f"Erro: {e}")
+    finally:
+        if 'conn' in locals():
+            conn.close()
+        # Limpa campos
+        Quantidade_R.delete(0, tk.END)
         Nome_quantidade.delete(0, tk.END)
-        Nome_quantidade.insert(0, dados_produto[0][0])
-        #Quantidade_R.delete(0, tk.END)
-        #Quantidade_R.insert(0, dados_produto[0][1])
+        produto_selecionado_saida = None
 
-def inserir_dados(nome_produto, frame):
+def inserir_dados_saida(nome_produto, frame):
     global produto_selecionado_saida
     conexao_cadastro = sqlite3.connect("Banco estoque.db")
     terminal_cadastro_sql = conexao_cadastro.cursor()
@@ -281,163 +411,118 @@ def atualizar_scrollframe_entrada(frame):
 def inserir_dados_entrada(nome_produto, frame):
     global produto_selecionado_entrada
 
-    conexao_cadastro = sqlite3.connect("Banco estoque.db")
-    terminal_cadastro_sql = conexao_cadastro.cursor()
-    terminal_cadastro_sql.execute(f"SELECT * FROM cadastro WHERE nome = '{nome_produto}'")
-    dados_produto = terminal_cadastro_sql.fetchall()
-    conexao_cadastro.close()
+    try:
+        conexao_cadastro = sqlite3.connect("Banco estoque.db")
+        terminal_cadastro_sql = conexao_cadastro.cursor()
+        terminal_cadastro_sql.execute(f"SELECT * FROM cadastro WHERE nome = '{nome_produto}'")
+        dados_produto = terminal_cadastro_sql.fetchall()
 
-    if frame == Produto_E:
-        produto_selecionado_entrada = dados_produto[0]  # Armazena o produto
-        Nome_quantidadeE.delete(0, tk.END)
-        Nome_quantidadeE.insert(0, dados_produto[0][0])
-
+        if dados_produto:
+            if frame == Produto_E:
+                produto_selecionado_entrada = dados_produto[0]
+                Nome_quantidadeE.delete(0, tk.END)
+                Nome_quantidadeE.insert(0, dados_produto[0][0])
+                Quantidade_E.delete(0, tk.END)
+                Quantidade_E.insert(0, str(dados_produto[0][1]))
+    except Exception as e:
+        print(f"Erro ao inserir dados de entrada: {e}")
+    finally:
+        if 'conexao_cadastro' in locals():
+            conexao_cadastro.close()
 
 
 def adicionar_item_entrada():
+        global produto_selecionado_entrada
+
+        if produto_selecionado_entrada is None:
+            print("❌ Nenhum produto selecionado!")
+            return
+
+        quantidade_recebida = Quantidade_E.get().strip()
+
+        if not quantidade_recebida.isdigit():
+            print("❌ Quantidade inválida! Digite um número.")
+            return
+
+        quantidade_recebida = int(quantidade_recebida)
+
+        texto_item = f"{produto_selecionado_entrada[0]} | Qtd: {quantidade_recebida}"
+
+        create_line_entrada(Entrada_frame, texto_item, len(Entrada_frame.winfo_children()) // 2 + 1)
+
+        Quantidade_E.delete(0, tk.END)
+        produto_selecionado_entrada = None
+        Nome_quantidadeE.delete(0, tk.END)
+
+
+def salvar_entrada():
     global produto_selecionado_entrada
 
-    if produto_selecionado_entrada is None:
+    if not produto_selecionado_entrada:
         print("❌ Nenhum produto selecionado!")
         return
 
-    quantidade_recebida = Quantidade_E.get().strip()
-
-    if not quantidade_recebida.isdigit():
-        print("❌ Quantidade inválida! Digite um número.")
+    quantidade = Quantidade_E.get()
+    if not quantidade.isdigit():
+        print("❌ Quantidade inválida!")
         return
 
-    quantidade_recebida = int(quantidade_recebida)
+    quantidade = int(quantidade)
+    nome_produto = produto_selecionado_entrada[0]
 
-    texto_item = f"{produto_selecionado_entrada[0]} | Qtd: {quantidade_recebida}"
+    try:
+        conn = sqlite3.connect("Banco estoque.db")
+        cursor = conn.cursor()
 
-    # Corrigido: Usar Entrada_frame (frame de entrada)
-    create_line(Entrada_frame, texto_item, len(Entrada_frame.winfo_children()) // 2 + 1)
+        # Atualiza estoque
+        cursor.execute("UPDATE cadastro SET quantidade = quantidade + ? WHERE nome = ?",
+                       (quantidade, nome_produto))
 
-    Quantidade_E.delete(0, tk.END)
+        # Registra histórico
+        cursor.execute("INSERT INTO historico_entrada (nome, quantidade, data) VALUES (?, ?, datetime('now'))",
+                       (nome_produto, quantidade))
+
+        conn.commit()
+        print("✅ Entrada registrada com sucesso!")
+
+        # Atualiza todas as visualizações
+        ler_cadastro()
+        ler_historico_entrada()
+        Tela_B_entrada()  # Força a atualização do frame de relatório
+
+    except Exception as e:
+        print(f"Erro: {e}")
+    finally:
+        if 'conn' in locals():
+            conn.close()
+        # Limpa campos
+        Quantidade_E.delete(0, tk.END)
+        Nome_quantidadeE.delete(0, tk.END)
+        produto_selecionado_entrada = None
+
+
+
+
+def cancelar_operacao():
+    try:
+        Quantidade_R.delete(0, tk.END)
+        Nome_quantidade.delete(0, tk.END)
+    except:
+        pass
+
+    try:
+        Quantidade_E.delete(0, tk.END)
+        Nome_quantidadeE.delete(0, tk.END)
+    except:
+        pass
+
+    global produto_selecionado_saida, produto_selecionado_entrada
+    produto_selecionado_saida = None
     produto_selecionado_entrada = None
-    Nome_quantidadeE.delete(0, tk.END)
+    print("Operação cancelada.")
 
 def cancelar_edicao():
     limpar_campo_edicao()
-
-
-def cancelar_saida():
-    # Limpa os campos de entrada
-    Nome_quantidade.delete(0, tk.END)
-    Quantidade_R.delete(0, tk.END)
-
-    # Limpa o frame de linhas (itens adicionados)
-    for widget in line_frame.winfo_children():
-        widget.destroy()
-
-    # Reseta a seleção
-    global produto_selecionado_saida
-    produto_selecionado_saida = None
-
-
-def cancelar_entrada():
-    # Limpa os campos de entrada
-    Nome_quantidadeE.delete(0, tk.END)
-    Quantidade_E.delete(0, tk.END)
-
-    # Limpa o frame de linhas (itens adicionados)
-    for widget in Entrada_frame.winfo_children():
-        widget.destroy()
-
-    # Reseta a seleção
-    global produto_selecionado_entrada
-    produto_selecionado_entrada = None
-
-
-def salvar_operacao():
-    global produto_selecionado_entrada, produto_selecionado_saida
-    conn = sqlite3.connect("Banco estoque.db")
-    cursor = conn.cursor()
-
-    try:
-        if produto_selecionado_entrada:
-            quantidade = Quantidade_E.get()
-            if quantidade.isdigit():
-                cursor.execute("INSERT INTO historico_entrada (nome, quantidade) VALUES (?, ?)",
-                               (produto_selecionado_entrada[0], quantidade))
-                # Atualiza o estoque
-                cursor.execute("UPDATE cadastro SET quantidade = quantidade + ? WHERE nome = ?",
-                               (quantidade, produto_selecionado_entrada[0]))
-
-        if produto_selecionado_saida:
-            quantidade = Quantidade_R.get()
-            if quantidade.isdigit():
-                cursor.execute("INSERT INTO historico_saida (nome, quantidade) VALUES (?, ?)",
-                               (produto_selecionado_saida[0], quantidade))
-                # Atualiza o estoque
-                cursor.execute("UPDATE cadastro SET quantidade = quantidade - ? WHERE nome = ?",
-                               (quantidade, produto_selecionado_saida[0]))
-
-        conn.commit()
-    finally:
-        conn.close()
-
-    # Limpa os campos após salvar
-    Quantidade_E.delete(0, tk.END)
-    Quantidade_R.delete(0, tk.END)
-    produto_selecionado_entrada = None
-    produto_selecionado_saida = None
-
-    # Recarrega os históricos para mostrar as alterações
-    carregar_historico()
-
-
-def carregar_historico():
-    criar_tabelas_historico()
-
-    # Limpa as tabelas antes de carregar novos dados
-    for row in tabela_Saida.get_children():
-        tabela_Saida.delete(row)
-    for row in tabela_Entrada.get_children():
-        tabela_Entrada.delete(row)
-
-    # Configura as colunas das tabelas
-    tabela_Saida['columns'] = coluna_saida
-    for col in coluna_saida:
-        tabela_Saida.heading(col, text=col)
-        tabela_Saida.column(col, width=110, anchor='center')
-
-    tabela_Entrada['columns'] = coluna_entrada
-    for col in coluna_entrada:
-        tabela_Entrada.heading(col, text=col)
-        tabela_Entrada.column(col, width=110, anchor='center')
-
-    # Carrega os dados do histórico de saída
-    conn = sqlite3.connect("Banco estoque.db")
-    cursor = conn.cursor()
-
-    try:
-        cursor.execute("SELECT nome, quantidade, data FROM historico_saida ORDER BY data DESC")
-        for row in cursor.fetchall():
-            tabela_Saida.insert("", tk.END, values=row)
-
-        # Carrega os dados do histórico de entrada
-        cursor.execute("SELECT nome, quantidade, data FROM historico_entrada ORDER BY data DESC")
-        for row in cursor.fetchall():
-            tabela_Entrada.insert("", tk.END, values=row)
-    finally:
-        conn.close()
-
-def criar_tabelas_historico():
-    conn = sqlite3.connect("Banco estoque.db")
-    conn.execute("""CREATE TABLE IF NOT EXISTS historico_saida (
-                    nome TEXT, 
-                    quantidade INTEGER, 
-                    data TEXT)""")
-    conn.execute("""CREATE TABLE IF NOT EXISTS historico_entrada (
-                    nome TEXT, 
-                    quantidade INTEGER, 
-                    data TEXT)""")
-    conn.commit()
-    conn.close()
-
-
 
 
 def Tela_Cadastrar():
@@ -452,6 +537,10 @@ def Tela_Cadastrar():
     if hasattr(Frame_Cadastro, 'produtos_frame'):
         atualizar_scrollframe(Frame_Cadastro.produtos_frame)
 
+def atualizar_tabelas():
+    ler_cadastro()
+    ler_historico_saida()
+    ler_historico_entrada()
 
 def Tela_Editar():
     Frame_Cadastro.grid_forget()
@@ -475,6 +564,7 @@ def Tela_Saída():
     Frame_Saida.grid(row=0, column=1, padx=5, pady=5)
     #atualizar_scrollframe(Produto_S)
     atualizar_scrollframe_saida(Produto_S)
+    ler_historico_saida()
 
 def Tela_Entrada():
     Frame_Cadastro.grid_forget()
@@ -487,6 +577,7 @@ def Tela_Entrada():
     Frame_Entrada.grid(row=0, column=1, padx=5, pady=5)
     #atualizar_scrollframe(Produto_E)
     atualizar_scrollframe_entrada(Produto_E)
+    ler_historico_entrada()
 
 def Tela_Relatorio():
     Frame_Cadastro.grid_forget()
@@ -527,24 +618,19 @@ def on_trash_icon_click2(item1_num):
     print(f"Ícone de lixeira da linha {item1_num} clicado!")
 
 def create_line_entrada(frame, text, item1_num):
-    linha_frame_saida = customtkinter.CTkFrame(frame)
-    linha_frame_saida.grid(row=item1_num, column=0, columnspan=2, sticky="ew", pady=2)
-
-    # Label com o texto do item
-    label = customtkinter.CTkLabel(Entrada_frame, text=text, anchor="w")
+    linha_frame = customtkinter.CTkFrame(frame)
+    linha_frame.grid(row=item1_num, column=0, columnspan=2, sticky="ew", pady=2)
+    label = customtkinter.CTkLabel(linha_frame, text=text, anchor="w")
     label.pack(side="left", padx=5, fill="x", expand=True)
-
-    # Botão de lixeira para remover
     trash_icon = customtkinter.CTkButton(
-        Entrada_frame,
+        linha_frame,
         text="🗑️",
         width=40, height=20,
-        command=lambda: Entrada_frame.destroy()  # Remove a linha
+        command=lambda: linha_frame.destroy()
     )
     trash_icon.pack(side="right", padx=5)
-
-    Entrada_frame.grid_columnconfigure(0, weight=1)
-    Entrada_frame.grid_columnconfigure(1, weight=1)
+    frame.grid_columnconfigure(0, weight=1)
+    frame.grid_columnconfigure(1, weight=1)
 
 def Tela_B_estoque():
     Frame_B_Relatorio_Saida.grid_forget()
@@ -557,13 +643,29 @@ def Tela_B_saida():
     Frame_B_Relatorio_Entrada.grid_forget()
     Frame_B_Relatorio_Saida.grid_propagate(False)
     Frame_B_Relatorio_Saida.grid(row=0, column=1, padx=5, pady=5)
-    carregar_historico()
+
+
 def Tela_B_entrada():
     Frame_Relatorio.grid_forget()
     Frame_B_Relatorio_Saida.grid_forget()
     Frame_B_Relatorio_Entrada.grid_propagate(False)
     Frame_B_Relatorio_Entrada.grid(row=0, column=1, padx=5, pady=5)
-    carregar_historico()
+
+    # Força a leitura dos dados mais recentes
+    ler_historico_entrada()
+
+    # Atualiza a tabela
+    tabela_Entrada.delete(*tabela_Entrada.get_children())
+
+    conexao = sqlite3.connect("Banco estoque.db")
+    cursor = conexao.cursor()
+    cursor.execute("SELECT nome, quantidade, data FROM historico_entrada ORDER BY data DESC")
+    rows = cursor.fetchall()
+
+    for row in rows:
+        tabela_Entrada.insert("", tk.END, values=row)
+
+    conexao.close()
 
 janela2 = None
 
@@ -744,13 +846,13 @@ Quantidade_R.grid(padx=5, pady=0, row=2, column=1, stick="w")
 item_B = customtkinter.CTkButton(Frame_Saida, text="Adic item", fg_color="Blue", font=("Couvier", 16), width=130, command=adicionar_item_saida)
 item_B.grid(padx=5, pady=5, row=2, column=2, stick="e")
 
-line_frame = customtkinter.CTkFrame(Frame_Saida, width=230, height=150)
+line_frame = customtkinter.CTkFrame(Frame_Saida, width=230)
 line_frame.grid(padx=5, pady=0, row=3, column=1, columnspan=3, stick="we")
 
-Cancelar_saida = customtkinter.CTkButton(Frame_Saida, text="Cancelar", fg_color="Blue", font=("Couvier", 16), width=80, command=cancelar_saida)
+Cancelar_saida = customtkinter.CTkButton(Frame_Saida, text="Cancelar", fg_color="Blue", font=("Couvier", 16), width=80,command=cancelar_operacao)
 Cancelar_saida.grid(padx=5, pady=0, stick="w", row=4, column=1)
 
-S_saida = customtkinter.CTkButton(Frame_Saida, text="Salvar", fg_color="Blue", font=("Couvier", 16), width=80, command=salvar_operacao)
+S_saida = customtkinter.CTkButton(Frame_Saida, text="Saida", fg_color="Blue", font=("Couvier", 16), width=80, command=salvar_saida)
 S_saida.grid(padx=5, pady=0, stick="e", row=4, column=2)
 
 # frame05
@@ -775,13 +877,13 @@ Quantidade_E.grid(padx=5, pady=0, row=2, column=1, stick="w")
 item_Adic = customtkinter.CTkButton(Frame_Entrada, text="Adic item", fg_color="Blue", font=("Couvier", 16), width=130, command=adicionar_item_entrada)
 item_Adic.grid(padx=5, pady=5, row=2, column=2, stick="e")
 
-Entrada_frame = customtkinter.CTkFrame(Frame_Entrada, width=230, height=150)
-Entrada_frame.grid(padx=5, pady=0, row=3, column=1, columnspan=3, stick="nsew")
+Entrada_frame = customtkinter.CTkFrame(Frame_Entrada, width=230)
+Entrada_frame.grid(padx=5, pady=0, row=3, column=1, columnspan=3, stick="we")
 
-Cancelar_entrada = customtkinter.CTkButton(Frame_Entrada, text="Cancelar", fg_color="Blue", font=("Couvier", 16), width=80, command= cancelar_entrada)
+Cancelar_entrada = customtkinter.CTkButton(Frame_Entrada, text="Cancelar", fg_color="Blue", font=("Couvier", 16), width=80, command=cancelar_operacao)
 Cancelar_entrada.grid(padx=5, pady=0, stick="w", row=4, column=1)
 
-S_saida_E = customtkinter.CTkButton(Frame_Entrada, text="Salvar", fg_color="Blue", font=("Couvier", 16), width=80, command=salvar_operacao)
+S_saida_E = customtkinter.CTkButton(Frame_Entrada, text="Salvar", fg_color="Blue", font=("Couvier", 16), width=80, command=salvar_entrada)
 S_saida_E.grid(padx=5, pady=0, stick="e", row=4, column=2)
 
 # frame6
@@ -865,7 +967,7 @@ tabela_Saida.column("Data/hora", width=110)
 
 
 scroll_Saida = tkinter.ttk.Scrollbar(Frame_B_Relatorio_Saida, orient="vertical", command=tabela_Saida.yview)
-tabela_Saida.grid(pady=5,padx=5,row=2,column=0,columnspan=4,stick="nsew")
+tabela_Saida.grid(pady=5, padx=5, row=2, column=0, columnspan=4, stick="nsew")
 
 for col_saida in coluna_saida:
     tabela_Saida.heading(col_saida, text=col_saida)
@@ -916,13 +1018,14 @@ Estoque_R_S.grid(pady=5, padx=5, row=2, column=0, columnspan=4, stick="nsew")
 
 
 tabela_Entrada = tkinter.ttk.Treeview(Frame_B_Relatorio_Entrada, columns=coluna_saida, show="headings", height=5)
+
 tabela_Entrada.column("Nome", width=110)
 tabela_Entrada.column("Quantidade", width=110)
 tabela_Entrada.column("Data/hora", width=110)
 
 
 scroll_Entrada = tkinter.ttk.Scrollbar(Frame_B_Relatorio_Entrada, orient="vertical", command=tabela_Entrada.yview)
-tabela_Entrada.grid(pady=5,padx=5,row=2,column=0,columnspan=4,stick="nsew")
+tabela_Entrada.grid(pady=5, padx=5, row=2, column=0, columnspan=4, stick="nsew")
 
 for col_entrada in coluna_entrada:
     tabela_Entrada.heading(col_entrada, text=col_entrada)
